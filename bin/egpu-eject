@@ -10,6 +10,9 @@ PRIMARY_USER=$(ps -o user= -C steam | head -n 1 | xargs)
 mkdir -p "$DATA_DIR/configs"
 exec > "$LOG_DIR/xgmobile_manager_eject_${VENDOR}.log" 2>&1
 
+# steamos-readonly is SteamOS-only; CachyOS has a mutable FS so this is a no-op there
+steamos_readonly() { command -v steamos-readonly &>/dev/null && steamos-readonly "$@" || true; }
+
 echo "--- XG Mobile Eject ($VENDOR) Started at $(date) ---"
 
 if systemctl is-active --quiet supergfxd.service; then 
@@ -37,14 +40,14 @@ if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]]; then
   if [ "$VENDOR" == "nvidia" ]; then
     # De-Fanging Configs
     echo "De-fanging NVIDIA configs to protect AMD Handheld Mode..."
-    steamos-readonly disable
+    steamos_readonly disable
     mkdir -p $DATA_DIR/configs_backup
     mv /usr/share/glvnd/egl_vendor.d/*nvidia* $DATA_DIR/configs_backup/ 2>/dev/null || true
     mv /usr/share/vulkan/implicit_layer.d/*nvidia* $DATA_DIR/configs_backup/ 2>/dev/null || true
     mv /usr/share/vulkan/explicit_layer.d/*nvidia* $DATA_DIR/configs_backup/ 2>/dev/null || true
     mv /usr/share/vulkan/icd.d/*nvidia* $DATA_DIR/configs_backup/ 2>/dev/null || true
     mv /usr/share/X11/xorg.conf.d/10-nvidia* $DATA_DIR/configs_backup/ 2>/dev/null || true
-    steamos-readonly enable
+    steamos_readonly enable
   
     # Environment Cleanup (System-Wide)
     # We unset the exact variables we set in the enable script

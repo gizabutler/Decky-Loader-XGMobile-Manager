@@ -10,6 +10,9 @@ PRIMARY_USER=$(ps -o user= -C steam | head -n 1 | xargs)
 mkdir -p "$DATA_DIR/configs"
 exec > "$LOG_DIR/xgmobile_manager_enable_${VENDOR}.log" 2>&1
 
+# steamos-readonly is SteamOS-only; CachyOS has a mutable FS so this is a no-op there
+steamos_readonly() { command -v steamos-readonly &>/dev/null && steamos-readonly "$@" || true; }
+
 echo "--- XG Mobile Enable ($VENDOR) Started at $(date) ---"
 
 # Hardware Lock Check
@@ -55,7 +58,7 @@ if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]];  then
 
   if [ "$NEEDS_REPAIR" -eq 1 ]; then
     echo "System files missing. Initiating self-repair..."
-    steamos-readonly disable
+    steamos_readonly disable
   
     # Restore global terminal commands
     ln -sf "$REPO_ROOT/bin/egpu-enable" /usr/local/bin/egpu-enable
@@ -75,18 +78,18 @@ if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]];  then
     else
       systemctl daemon-reload
     fi
-    steamos-readonly enable
+    steamos_readonly enable
     echo "Self-repair complete."
   fi
 fi
 
 if [ -L /usr/lib/systemd/system-sleep/egpu-resume-fix ] || [ -f /usr/lib/systemd/system-sleep/egpu-resume-fix ]; then
   echo "Purging obsolete legacy egpu-resume-fix..."
-  steamos-readonly disable
+  steamos_readonly disable
   rm -f /usr/lib/systemd/system-sleep/egpu-resume-fix
   rm -f /etc/systemd/system/egpu-resume-fix.service
   rm -f /etc/systemd/system/egpu-boot-guardian.service
-  steamos-readonly enable
+  steamos_readonly enable
 fi
 
 if systemctl is-active --quiet supergfxd.service; then 
@@ -178,13 +181,13 @@ if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]]; then
     echo "Dynamic Hardware Lock: $NVIDIA_ID"
 
     echo "Re-fanging NVIDIA configs for active session..."
-    steamos-readonly disable
+    steamos_readonly disable
     mv $DATA_DIR/configs_backup/10_nvidia* /usr/share/glvnd/egl_vendor.d/ 2>/dev/null || true
     mv $DATA_DIR/configs_backup/*icd* /usr/share/vulkan/icd.d/ 2>/dev/null || true
     mv $DATA_DIR/configs_backup/*layer* /usr/share/vulkan/implicit_layer.d/ 2>/dev/null || true
     mv $DATA_DIR/configs_backup/*layer* /usr/share/vulkan/explicit_layer.d/ 2>/dev/null || true
     mv $DATA_DIR/configs_backup/10-nvidia* /usr/share/X11/xorg.conf.d/ 2>/dev/null || true
-    steamos-readonly enable
+    steamos_readonly enable
 
     # This is what forces the NVIDIA card into Wayland mode
     echo "Loading NVIDIA modules..."

@@ -392,19 +392,22 @@ class Plugin:
     return await self._execute_script("repair-services", REPAIR_LOG, vendor)
 
   async def install_nvidia(self):
-    if not self.get_os_type() == "steamos":
-      log("SteamOS not detected: Blocking DKMS driver installation.")
-      return "Error: SteamOS not detected. NVIDIA Driver install is currently only for SteamOS."
-        
-    log("SteamOS detected: Starting DKMS driver compilation.")
-    #return await self._execute_script("install-nvidia.sh", INSTALL_LOG, LOG_DIR, DATA_DIR)
-    res = await self._execute_script("install-nvidia.sh", INSTALL_LOG, LOG_DIR, DATA_DIR)
-    if "Code 1" in res:
-        return "ALREADY_INSTALLED"
-    elif res == "Success":
-        return "SUCCESS"
+    os_type = self.get_os_type()
+    if os_type == "steamos":
+      log("SteamOS detected: Starting DKMS driver compilation.")
+      res = await self._execute_script("install-nvidia.sh", INSTALL_LOG, LOG_DIR, DATA_DIR)
+    elif os_type == "cachyos":
+      log("CachyOS detected: Starting pacman NVIDIA install.")
+      res = await self._execute_script("install-nvidia-cachyos.sh", INSTALL_LOG, LOG_DIR, DATA_DIR)
     else:
-        return "ERROR"
+      log(f"Unsupported OS ({os_type}): Blocking driver installation.")
+      return "Error: Unsupported OS. NVIDIA driver install supports SteamOS and CachyOS."
+    if "Code 1" in res:
+      return "ALREADY_INSTALLED"
+    elif res == "Success":
+      return "SUCCESS"
+    else:
+      return "ERROR"
 
   async def uninstall_nvidia(self):
     return await self._execute_script("uninstall.sh", UNINSTALL_LOG, LOG_DIR, DATA_DIR)
