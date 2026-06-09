@@ -56,14 +56,14 @@ if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]]; then
     exit 1
   fi
 
-  echo "Updating environment variables with fresh boot nodes: $EGPU_CARD (NVIDIA) : $IGPU_CARD (AMD)"
+  echo "Updating environment variables with fresh boot nodes: $IGPU_CARD (AMD) : $EGPU_CARD (NVIDIA)"
 
   # 1. Update the System-Wide Environment (drop-in file wins; legacy /etc/environment fallback)
   if [ -f /etc/environment.d/xgmobile-nvidia.conf ]; then
-    sed -i 's|WLR_DRM_DEVICES=.*|WLR_DRM_DEVICES='$EGPU_CARD':'$IGPU_CARD'|' /etc/environment.d/xgmobile-nvidia.conf
+    sed -i 's|WLR_DRM_DEVICES=.*|WLR_DRM_DEVICES='$IGPU_CARD':'$EGPU_CARD'|' /etc/environment.d/xgmobile-nvidia.conf
   else
     steamos-readonly disable 2>/dev/null || true
-    sed -i 's|WLR_DRM_DEVICES=.*|WLR_DRM_DEVICES='$EGPU_CARD':'$IGPU_CARD'|' /etc/environment
+    sed -i 's|WLR_DRM_DEVICES=.*|WLR_DRM_DEVICES='$IGPU_CARD':'$EGPU_CARD'|' /etc/environment
     steamos-readonly enable 2>/dev/null || true
   fi
 
@@ -71,9 +71,7 @@ if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]]; then
   PLASMA_ENV_DIR="/home/$PRIMARY_USER/.config/plasma-workspace/env"
   sudo -u $PRIMARY_USER bash -c "cat > '$PLASMA_ENV_DIR/xgmobile-nvidia-kwin.sh' << EOF
 #!/bin/bash
-export KWIN_DRM_DEVICES=$EGPU_CARD:$IGPU_CARD
-export GBM_BACKEND=nvidia-drm
-export __GLX_VENDOR_LIBRARY_NAME=nvidia
+export KWIN_DRM_DEVICES=$IGPU_CARD:$EGPU_CARD
 EOF"
   echo "SteamOS/CachyOS specific DRM environment sync complete."
 else

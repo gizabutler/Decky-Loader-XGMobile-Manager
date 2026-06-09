@@ -83,8 +83,9 @@ if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]]; then
     # We kill any processes still holding the GPU and unload the modules
     echo "Stopping NVIDIA power services..."
     systemctl stop nvidia-powerd nvidia-persistenced 2>/dev/null || true
-    systemctl disable xgmobile-boot-sync.service 2>/dev/null
-    
+    # Keep boot-sync enabled — on CachyOS it must run every boot as a safety net;
+    # on SteamOS its own logic (egpu_enable=0 check) handles self-disabling.
+
     echo "Force killing any lingering GPU processes and stopping NVIDIA services..."
     fuser -kv /dev/nvidia* >/dev/null 2>&1
     modprobe -r nvidia_drm || true
