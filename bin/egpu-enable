@@ -237,25 +237,22 @@ if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]]; then
     modprobe nvidia_modeset nvidia_uvm nvidia
 
     # PERSISTENT DRIVER SETTINGS
-    # We write the modeset to a config file so the kernel loads it at boot
-    echo "Setting NVIDIA config file for persistence on reboot..."
+    # Write modeset=1 for this session (egpu-eject removes it; boot-sync removes it on reboot).
+    echo "Setting NVIDIA config file for persistence..."
     echo "options nvidia_drm modeset=1 fbdev=1" > /etc/modprobe.d/nvidia-egpu.conf
 
-    # PERSISTENT ENVIRONMENT (The Global File)
-    # We use a function to safely add lines to /etc/environment
-    echo "Writing environment variables to disk......"
-    safe_add() {
-      local _key="${1%%=*}"; sed -i "/^${_key}=/d" /etc/environment 2>/dev/null || true; echo "$1" >> /etc/environment
-    }
-
-    safe_add "MESA_VK_DEVICE_SELECT=$NVIDIA_ID"
-    safe_add "VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json"
-    safe_add "WLR_DRM_DEVICES=$EGPU_CARD:$IGPU_CARD"
-    #safe_add "KWIN_DRM_DEVICES=$EGPU_CARD:$IGPU_CARD"
-    #safe_add "GBM_BACKEND=nvidia-drm"
-    #safe_add "__GLX_VENDOR_LIBRARY_NAME=nvidia"
-    safe_add "VK_LOADER_LAYERS_DISABLE=*"
-    safe_add "GAMESCOPE_DISABLE_VK_KHR_PRESENT_WAIT=1"
+    # PERSISTENT ENVIRONMENT (drop-in file — boot-sync removes on reboot, eject removes on eject)
+    # Using /etc/environment.d/ so the file can be atomically created/deleted without
+    # corrupting /etc/environment, and boot-sync can safely rm -f it on every startup.
+    echo "Writing environment variables to disk..."
+    mkdir -p /etc/environment.d
+    cat > /etc/environment.d/xgmobile-nvidia.conf << EOF
+MESA_VK_DEVICE_SELECT=$NVIDIA_ID
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
+WLR_DRM_DEVICES=$EGPU_CARD:$IGPU_CARD
+VK_LOADER_LAYERS_DISABLE=*
+GAMESCOPE_DISABLE_VK_KHR_PRESENT_WAIT=1
+EOF
 
     # Environment Injection (System-Wide)
     echo "Injecting variables into systemd session..."
@@ -298,12 +295,9 @@ EOF"
 
   elif [ "$VENDOR" == "amd" ]; then
     echo "AMD Vendor detected. Injecting minimal variables to prioritize the new GPU..."
-    echo "Writing environment variables to disk......"
-    safe_add() {
-      local _key="${1%%=*}"; sed -i "/^${_key}=/d" /etc/environment 2>/dev/null || true; echo "$1" >> /etc/environment
-    }
-
-    safe_add "WLR_DRM_DEVICES=$EGPU_CARD:$IGPU_CARD"
+    echo "Writing environment variables to disk..."
+    mkdir -p /etc/environment.d
+    echo "WLR_DRM_DEVICES=$EGPU_CARD:$IGPU_CARD" > /etc/environment.d/xgmobile-nvidia.conf
     echo "Injecting variables into systemd session..."
     systemctl set-environment WLR_DRM_DEVICES=$EGPU_CARD:$IGPU_CARD
 

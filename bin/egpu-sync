@@ -4,17 +4,30 @@ OS_TYPE=$2
 PRIMARY_USER=$(ps -o user= -C steam | head -n 1 | xargs)
 [ -z "$PRIMARY_USER" ] && PRIMARY_USER="deck"
 
-# Check if the ASUS WMI interface says the eGPU is actually connected
-ACTIVE=$(cat /sys/devices/platform/asus-nb-wmi/egpu_enable 2>/dev/null || echo "0")
+ENABLE_PATH="/sys/devices/platform/asus-nb-wmi/egpu_enable"
+if [ -f "$ENABLE_PATH" ]; then
+    ACTIVE=$(cat "$ENABLE_PATH")
+else
+    ACTIVE="not_present"
+fi
 
-if [ "$ACTIVE" -eq 0 ]; then
+if [ "$ACTIVE" = "not_present" ]; then
+    # CachyOS: BIOS-managed PCIe — egpu_enable sysfs absent.
+    # The GPU may or may not be connected, but we can't tell from sysfs.
+    # Always clean up NVIDIA boot state so a reboot without running egpu-eject
+    # doesn't leave the system trying to start a display session against a half-configured NVIDIA setup.
+    # egpu-enable re-creates these files when the user explicitly activates the eGPU.
+    echo "NOTE: egpu_enable sysfs unavailable (CachyOS/BIOS-managed). Cleaning NVIDIA boot state..."
+    rm -f /etc/environment.d/xgmobile-nvidia.conf
+    rm -f /etc/modprobe.d/nvidia-egpu.conf
+    rm -f "/home/$PRIMARY_USER/.config/plasma-workspace/env/xgmobile-nvidia-kwin.sh"
+    # Do NOT disable the service — it must run on every boot to ensure clean state.
+    exit 0
+elif [ "$ACTIVE" -eq 0 ]; then
     echo "Failsafe triggered: XG Mobile is not physically connected."
     echo "Disabling sync service to clean up the environment."
     systemctl disable xgmobile-boot-sync.service 2>/dev/null
-    
-    # Optionally: Clean up the kwin env file here just to be safe
-    rm -f /home/deck/.config/plasma-workspace/env/xgmobile-nvidia-kwin.sh
-    
+    rm -f "/home/$PRIMARY_USER/.config/plasma-workspace/env/xgmobile-nvidia-kwin.sh"
     exit 0
 fi
 
@@ -45,10 +58,14 @@ if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]]; then
 
   echo "Updating environment variables with fresh boot nodes: $EGPU_CARD (NVIDIA) : $IGPU_CARD (AMD)"
 
-  # 1. Update the System-Wide Environment
-  steamos-readonly disable 2>/dev/null || true
-  sed -i 's|WLR_DRM_DEVICES=.*|WLR_DRM_DEVICES='$EGPU_CARD':'$IGPU_CARD'|' /etc/environment
-  steamos-readonly enable 2>/dev/null || true
+  # 1. Update the System-Wide Environment (drop-in file wins; legacy /etc/environment fallback)
+  if [ -f /etc/environment.d/xgmobile-nvidia.conf ]; then
+    sed -i 's|WLR_DRM_DEVICES=.*|WLR_DRM_DEVICES='$EGPU_CARD':'$IGPU_CARD'|' /etc/environment.d/xgmobile-nvidia.conf
+  else
+    steamos-readonly disable 2>/dev/null || true
+    sed -i 's|WLR_DRM_DEVICES=.*|WLR_DRM_DEVICES='$EGPU_CARD':'$IGPU_CARD'|' /etc/environment
+    steamos-readonly enable 2>/dev/null || true
+  fi
 
   # 2. Update the Isolated Plasma Environment
   PLASMA_ENV_DIR="/home/$PRIMARY_USER/.config/plasma-workspace/env"

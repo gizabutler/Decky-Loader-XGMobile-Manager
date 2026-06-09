@@ -27,15 +27,14 @@ echo "Stopping SDDM..."
 systemctl stop display-manager
 
 if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]]; then
-  echo "Sanitizing /etc/environment..."
-  sed -i '/MESA_VK_DEVICE_SELECT/d' /etc/environment
-  sed -i '/VK_ICD_FILENAMES/d' /etc/environment
-  sed -i '/WLR_DRM_DEVICES/d' /etc/environment
-  #sed -i '/KWIN_DRM_DEVICES/d' /etc/environment
-  #sed -i '/GBM_BACKEND/d' /etc/environment
-  #sed -i '/__GLX_VENDOR_LIBRARY_NAME/d' /etc/environment
-  sed -i '/VK_LOADER_LAYERS_DISABLE/d' /etc/environment
-  sed -i '/GAMESCOPE_DISABLE_VK_KHR_PRESENT_WAIT/d' /etc/environment
+  echo "Sanitizing environment..."
+  rm -f /etc/environment.d/xgmobile-nvidia.conf
+  # Legacy: also scrub /etc/environment in case of an older install that wrote there directly
+  sed -i '/MESA_VK_DEVICE_SELECT/d' /etc/environment 2>/dev/null || true
+  sed -i '/VK_ICD_FILENAMES/d' /etc/environment 2>/dev/null || true
+  sed -i '/WLR_DRM_DEVICES/d' /etc/environment 2>/dev/null || true
+  sed -i '/VK_LOADER_LAYERS_DISABLE/d' /etc/environment 2>/dev/null || true
+  sed -i '/GAMESCOPE_DISABLE_VK_KHR_PRESENT_WAIT/d' /etc/environment 2>/dev/null || true
 
   if [ "$VENDOR" == "nvidia" ]; then
     # De-Fanging Configs
