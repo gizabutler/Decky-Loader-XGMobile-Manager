@@ -24,7 +24,7 @@ fi
 # Stop UI
 # We must kill the session before we pull the rug out from the hardware
 echo "Stopping SDDM..."
-systemctl stop sddm
+systemctl stop display-manager
 
 if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]]; then
   echo "Sanitizing /etc/environment..."
@@ -168,7 +168,7 @@ if [ "$SUCCESS" -eq 0 ]; then
   echo "WARNING: Hardware did not seem to drop from /dev/dri/. Proceeding anyway to restore UI."
 fi
 
-systemctl start sddm #--no-block
+systemctl start display-manager #--no-block
 
 #if [ $SUPERGFX_TRIG == 1 ]; then
 #  echo "Restarting supergfxctl..."

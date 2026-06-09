@@ -206,7 +206,7 @@ fi
   # STOP UI
 # We must stop sddm so we can unload the driver modules
 echo "Stopping SDDM..."
-systemctl stop sddm
+systemctl stop display-manager
 
  
 if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]]; then
@@ -245,7 +245,7 @@ if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]]; then
     # We use a function to safely add lines to /etc/environment
     echo "Writing environment variables to disk......"
     safe_add() {
-      grep -qF "$1" /etc/environment || echo "$1" >> /etc/environment
+      local _key="${1%%=*}"; sed -i "/^${_key}=/d" /etc/environment 2>/dev/null || true; echo "$1" >> /etc/environment
     }
 
     safe_add "MESA_VK_DEVICE_SELECT=$NVIDIA_ID"
@@ -300,7 +300,7 @@ EOF"
     echo "AMD Vendor detected. Injecting minimal variables to prioritize the new GPU..."
     echo "Writing environment variables to disk......"
     safe_add() {
-      grep -qF "$1" /etc/environment || echo "$1" >> /etc/environment
+      local _key="${1%%=*}"; sed -i "/^${_key}=/d" /etc/environment 2>/dev/null || true; echo "$1" >> /etc/environment
     }
 
     safe_add "WLR_DRM_DEVICES=$EGPU_CARD:$IGPU_CARD"
@@ -314,7 +314,7 @@ EOF"
   fi
 fi
 echo "Refreshing DRM session..."
-systemctl start sddm #--no-block
+systemctl start display-manager #--no-block
 
 #if [ $SUPERGFX_TRIG == 1 ]; then
 #  echo "Restarting supergfxctl..."
