@@ -115,17 +115,7 @@ fi
 # Used for all OSes for consistency
 # Hardware Activation
 EXISTING_CARDS=$(ls /dev/dri/card* 2>/dev/null)
-# Detect iGPU by AMD vendor ID — card numbering is not guaranteed when XG Mobile
-# is connected at boot (NVIDIA may get card0, AMD card1 or vice versa).
-IGPU_CARD=""
-for _vp in /sys/class/drm/card*/device/vendor; do
-  _v=$(cat "$_vp" 2>/dev/null)
-  if [[ "$_v" == "0x1002" || "$_v" == "0x1022" ]]; then
-    IGPU_CARD="/dev/dri/$(basename "$(dirname "$(dirname "$_vp")")")"
-    break
-  fi
-done
-[ -z "$IGPU_CARD" ] && IGPU_CARD=$(echo "$EXISTING_CARDS" | head -n 1)
+IGPU_CARD=""  # set after EGPU_CARD is known
 ENABLE_PATH="/sys/devices/platform/asus-nb-wmi/egpu_enable"
 if [ -f "$ENABLE_PATH" ]; then
   if [ "$(cat $ENABLE_PATH)" -eq 0 ]; then
@@ -184,6 +174,13 @@ if [ -z "$EGPU_CARD" ]; then
   exit 5
 fi
 echo "Success! eGPU dynamically detected as: $EGPU_CARD"
+# IGPU_CARD = whichever /dev/dri/card* is not the eGPU.
+# Done here so card numbering doesn't matter (no sysfs vendor traversal needed).
+for _card in /dev/dri/card*; do
+  [ "$_card" != "$EGPU_CARD" ] && { IGPU_CARD="$_card"; break; }
+done
+[ -z "$IGPU_CARD" ] && IGPU_CARD=$(echo "$EXISTING_CARDS" | head -n 1)
+echo "iGPU card: $IGPU_CARD"
 # Permissions (The ACL Hero)
 #echo "Setting user permissions for eGPU..."
 echo "Setting permissions for user: $PRIMARY_USER"
