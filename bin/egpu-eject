@@ -140,7 +140,11 @@ INITIAL_COUNT=$(echo "$INITIAL_CARDS" | wc -w)
 echo "Current DRM cards before disconnect: $INITIAL_COUNT"
 
 ENABLE_PATH="/sys/devices/platform/asus-nb-wmi/egpu_enable"
-echo 0 > "$ENABLE_PATH" || true
+if [ -f "$ENABLE_PATH" ]; then
+  echo 0 > "$ENABLE_PATH" || true
+else
+  echo "NOTE: egpu_enable sysfs unavailable. PCIe link is BIOS-managed — physically disconnect the XG Mobile after eject to fully remove it from the bus."
+fi
 echo 1 > /sys/bus/pci/rescan
 
 COUNT=0

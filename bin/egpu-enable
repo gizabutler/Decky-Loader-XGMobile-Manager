@@ -16,10 +16,24 @@ steamos_readonly() { command -v steamos-readonly &>/dev/null && steamos-readonly
 echo "--- XG Mobile Enable ($VENDOR) Started at $(date) ---"
 
 # Hardware Lock Check
-CONNECTED=$(cat /sys/devices/platform/asus-nb-wmi/egpu_connected || echo "0")
-if [ "$CONNECTED" -eq 0 ]; then
-  echo "ERROR: XG Mobile not locked."
-  exit 1
+# Primary: use asus-nb-wmi sysfs (SteamOS/standard kernels)
+# Fallback: if sysfs node absent (e.g. CachyOS deckify kernel without WMI eGPU patch),
+# check for an NVIDIA GPU already on the PCIe bus — the BIOS brings the link up at boot
+# when the XG Mobile is physically connected and locked.
+CONN_PATH="/sys/devices/platform/asus-nb-wmi/egpu_connected"
+if [ -f "$CONN_PATH" ]; then
+  CONNECTED=$(cat "$CONN_PATH")
+  if [ "$CONNECTED" -eq 0 ]; then
+    echo "ERROR: XG Mobile not locked (egpu_connected=0)."
+    exit 1
+  fi
+else
+  echo "WARNING: egpu_connected sysfs unavailable. Falling back to PCIe bus detection..."
+  if ! lspci -d 10de: | grep -qE "VGA|3D|Display"; then
+    echo "ERROR: No NVIDIA GPU found on PCIe bus and egpu_connected unavailable. Is the XG Mobile locked in?"
+    exit 1
+  fi
+  echo "NVIDIA GPU detected on PCIe bus. Proceeding without WMI lock confirmation."
 fi
 
 if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]];  then
@@ -103,8 +117,12 @@ fi
 EXISTING_CARDS=$(ls /dev/dri/card* 2>/dev/null)
 IGPU_CARD=$(echo "$EXISTING_CARDS" | head -n 1)
 ENABLE_PATH="/sys/devices/platform/asus-nb-wmi/egpu_enable"
-if [ "$(cat $ENABLE_PATH)" -eq 0 ]; then
-  echo 1 > "$ENABLE_PATH" || true
+if [ -f "$ENABLE_PATH" ]; then
+  if [ "$(cat $ENABLE_PATH)" -eq 0 ]; then
+    echo 1 > "$ENABLE_PATH" || true
+  fi
+else
+  echo "NOTE: egpu_enable sysfs unavailable. PCIe link assumed already active (BIOS-managed)."
 fi
 echo 1 > /sys/bus/pci/rescan
 
