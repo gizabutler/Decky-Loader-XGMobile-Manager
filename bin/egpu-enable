@@ -231,8 +231,11 @@ if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]]; then
     steamos_readonly enable
 
     # This is what forces the NVIDIA card into Wayland mode
+    echo "Stopping NVIDIA services before module reload..."
+    systemctl stop nvidia-persistenced nvidia-powerd 2>/dev/null || true
+    fuser -kv /dev/nvidia* >/dev/null 2>&1 || true
     echo "Loading NVIDIA modules..."
-    modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia
+    modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia 2>/dev/null || true
     modprobe nvidia_drm modeset=1 fbdev=1
     modprobe nvidia_modeset nvidia_uvm nvidia
 
