@@ -209,8 +209,17 @@ if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]]; then
 
     echo "Re-fanging NVIDIA configs for active session..."
     steamos_readonly disable
-    mv $DATA_DIR/configs_backup/10_nvidia* /usr/share/glvnd/egl_vendor.d/ 2>/dev/null || true
-    mv $DATA_DIR/configs_backup/*icd* /usr/share/vulkan/icd.d/ 2>/dev/null || true
+    # 10_nvidia.json (EGL vendor, priority 10) is intentionally NOT restored here.
+    # Restoring it makes NVIDIA EGL the system default, which crashes gamescope.
+    # Steam and gamescope use AMD EGL (50_mesa.json) for display; NVIDIA EGL is
+    # only needed for render offload scenarios that set it explicitly per-game.
+    #
+    # nvidia_icd.json (Vulkan ICD) is also NOT restored globally here.
+    # gamescope selects AMD Vulkan via MESA_VK_DEVICE_SELECT; if the NVIDIA ICD is
+    # in the global icd.d path, Steam's Vulkan stack may enumerate NVIDIA first,
+    # which fails when NVIDIA has no render node (/dev/dri/renderD129 absent until
+    # nvidia_drm fully creates it). PRIME render offload is handled per-game via
+    # VK_ICD_FILENAMES or DRI_PRIME env vars set in the game launch options.
     mv $DATA_DIR/configs_backup/*layer* /usr/share/vulkan/implicit_layer.d/ 2>/dev/null || true
     mv $DATA_DIR/configs_backup/*layer* /usr/share/vulkan/explicit_layer.d/ 2>/dev/null || true
     mv $DATA_DIR/configs_backup/10-nvidia* /usr/share/X11/xorg.conf.d/ 2>/dev/null || true
@@ -244,24 +253,38 @@ if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]]; then
     # Using /etc/environment.d/ so the file can be atomically created/deleted without
     # corrupting /etc/environment, and boot-sync can safely rm -f it on every startup.
     echo "Writing environment variables to disk..."
+    # Detect AMD GPU PCI vendor:device for MESA_VK_DEVICE_SELECT.
+    # Strip leading 0x so the format matches what the Mesa layer expects (e.g. "1002:150e").
+    AMD_PCI_DEVICE=$(cat /sys/class/drm/$(basename $IGPU_CARD)/device/device 2>/dev/null | sed 's/0x//')
+    if [ -z "$AMD_PCI_DEVICE" ]; then
+      AMD_PCI_DEVICE="150e"  # ROG Ally X iGPU fallback
+    fi
+    MESA_VK_SELECT="1002:${AMD_PCI_DEVICE}"
+
     mkdir -p /etc/environment.d
     cat > /etc/environment.d/xgmobile-nvidia.conf << EOF
 WLR_DRM_DEVICES=$IGPU_CARD:$EGPU_CARD
 GAMESCOPE_DISABLE_VK_KHR_PRESENT_WAIT=1
+MESA_VK_DEVICE_SELECT=$MESA_VK_SELECT
 EOF
 
     # Environment Injection (System-Wide)
     # AMD is first in WLR_DRM_DEVICES so gamescope uses AMD Vulkan for display (NVIDIA Vulkan
     # needs an X display to init — it becomes available for render offload once the session starts).
+    # MESA_VK_DEVICE_SELECT forces gamescope AND Steam to select the AMD iGPU for Vulkan;
+    # without it gamescope picks NVIDIA (more powerful) which has no connected display → blank screen.
     echo "Injecting variables into systemd session..."
     systemctl set-environment WLR_DRM_DEVICES=$IGPU_CARD:$EGPU_CARD
     systemctl set-environment GAMESCOPE_DISABLE_VK_KHR_PRESENT_WAIT=1
+    systemctl set-environment MESA_VK_DEVICE_SELECT=$MESA_VK_SELECT
 
     # Environment Injection (User-Session Fix)
     # We explicitly define the XDG_RUNTIME_DIR so root can talk to the deck session
     USER_UID=$(id -u $PRIMARY_USER)
     export DECK_BUS="XDG_RUNTIME_DIR=/run/user/$USER_UID"
     sudo -u $PRIMARY_USER $DECK_BUS systemctl --user set-environment WLR_DRM_DEVICES=$IGPU_CARD:$EGPU_CARD
+    sudo -u $PRIMARY_USER $DECK_BUS systemctl --user set-environment GAMESCOPE_DISABLE_VK_KHR_PRESENT_WAIT=1
+    sudo -u $PRIMARY_USER $DECK_BUS systemctl --user set-environment MESA_VK_DEVICE_SELECT=$MESA_VK_SELECT
 
     echo "Creating isolated KDE Plasma environment config..."
     PLASMA_ENV_DIR="/home/$PRIMARY_USER/.config/plasma-workspace/env"
