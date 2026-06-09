@@ -156,6 +156,19 @@ while [ -z "$EGPU_CARD" ] && [ $COUNT -lt 15 ]; do
   ((COUNT++))
 done
 
+# Fallback: when egpu_enable sysfs is absent (BIOS-managed PCIe), the GPU is already
+# on the bus at boot so no "new" card appears — find the NVIDIA card by vendor ID.
+if [ -z "$EGPU_CARD" ] && [ ! -f "/sys/devices/platform/asus-nb-wmi/egpu_enable" ]; then
+  echo "No new card detected. Trying vendor-based DRM detection (BIOS-managed path)..."
+  for vendor_path in /sys/class/drm/card*/device/vendor; do
+    if [ "$(cat "$vendor_path" 2>/dev/null)" == "0x10de" ]; then
+      EGPU_CARD="/dev/dri/$(basename "$(dirname "$(dirname "$vendor_path")")")"
+      echo "Found NVIDIA DRM node by vendor: $EGPU_CARD"
+      break
+    fi
+  done
+fi
+
 if [ -z "$EGPU_CARD" ]; then
   echo "ERROR: Hardware failed to appear in /dev/dri/"
   exit 5
