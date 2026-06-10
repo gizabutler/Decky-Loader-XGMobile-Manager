@@ -149,8 +149,6 @@ class Plugin:
     vendor = await self.get_setting("gpu_vendor", "nvidia")
     os_type = self.get_os_type()
 
-    if vendor == "nvidia" and os_type == "bazzite":
-      return "Error: Wrong OS Image. Please use the bazzite-nvidia-deck image."
     return await self._execute_script("egpu-enable", ENABLE_LOG, vendor, os_type, LOG_DIR, DATA_DIR)
 
   async def eject_egpu(self):
@@ -377,8 +375,6 @@ class Plugin:
     vendor = await self.get_setting("gpu_vendor", "nvidia")
     os_type = self.get_os_type()
 
-    if vendor == "nvidia" and os_type == "bazzite":
-      return "Error: Wrong OS Image. Please use the bazzite-nvidia-deck image."
     return await self._execute_script("supergfx-hybrid", HYBRID_LOG, vendor, os_type, LOG_DIR, DATA_DIR)
 
   async def integrated_supergfxctl(self):

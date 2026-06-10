@@ -290,14 +290,26 @@ export const QuickAccessContent = () => {
         </PanelSection>
       )}
 
-      {/* OS WARNING: WRONG BAZZITE IMAGE */}
+      {/* OS NOTE: plain bazzite-deck — NVIDIA modules not bundled */}
       {(osType === "bazzite") && (selectedVendor === "nvidia") && (
-        <PanelSection title="System Warning">
+        <PanelSection title="Bazzite Note">
           <PanelSectionRow>
-            <div style={{ color: "#ff5555", fontSize: "14px", marginBottom: "10px" }}>
-              <strong>Wrong OS Image Detected!</strong><br/>
-              You are running standard Bazzite. To use an NVIDIA eGPU, you MUST install the 'bazzite-deck-nvidia' image. 
-              The NVIDIA XG Mobile will not function correctly on this installation. Please install the correct version or select AMD.
+            <div style={{ color: "#ffab40", fontSize: "13px", marginBottom: "10px" }}>
+              <strong>Standard bazzite-deck detected.</strong><br/>
+              NVIDIA modules are not bundled in this image. For NVIDIA XG Mobile support,
+              reimage to <strong>bazzite-deck-nvidia</strong> — it keeps the AMD iGPU as the
+              primary display and bundles the NVIDIA drivers for eGPU use.
+            </div>
+          </PanelSectionRow>
+        </PanelSection>
+      )}
+      {/* OS NOTE: bazzite-deck-nvidia — correct image, no install needed */}
+      {(osType === "bazzite-nvidia") && (selectedVendor === "nvidia") && (
+        <PanelSection title="Bazzite Note">
+          <PanelSectionRow>
+            <div style={{ color: "#88ccff", fontSize: "13px", marginBottom: "10px" }}>
+              bazzite-deck-nvidia detected. No driver installation required — NVIDIA modules are
+              managed by the OS image. Use the Enable button to load the eGPU for this session.
             </div>
           </PanelSectionRow>
         </PanelSection>

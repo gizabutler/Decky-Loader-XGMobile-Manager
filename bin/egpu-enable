@@ -29,6 +29,7 @@ if [ -f "$CONN_PATH" ]; then
   fi
 else
   echo "WARNING: egpu_connected sysfs unavailable. Falling back to PCIe bus detection..."
+  echo 1 > /sys/bus/pci/rescan 2>/dev/null || true
   if ! lspci -d 10de: | grep -qE "VGA|3D|Display"; then
     echo "ERROR: No NVIDIA GPU found on PCIe bus and egpu_connected unavailable. Is the XG Mobile locked in?"
     exit 1
@@ -315,6 +316,71 @@ EOF"
 
   fi
 fi
+
+if [[ "$OS_TYPE" == *"bazzite"* ]]; then
+  if [ "$VENDOR" == "nvidia" ]; then
+    NVIDIA_ID=$(lspci -n -d 10de: | head -n 1 | awk '{print $3}')
+    echo "Dynamic Hardware Lock: $NVIDIA_ID"
+
+    # Permissions — set ACLs on the nodes created by the early modprobe
+    echo "Setting permissions for user: $PRIMARY_USER"
+    setfacl -m u:$PRIMARY_USER:rw $EGPU_CARD
+    setfacl -m u:$PRIMARY_USER:rw /dev/dri/renderD*
+    if [ -e /dev/nvidiactl ]; then
+      echo "Granting NVIDIA node permissions..."
+      setfacl -m "u:$PRIMARY_USER:rw" /dev/nvidia*
+    fi
+
+    echo "Setting NVIDIA config file for persistence..."
+    echo "options nvidia_drm modeset=1 fbdev=1" > /etc/modprobe.d/nvidia-egpu.conf
+
+    echo "Writing environment variables to disk..."
+    AMD_PCI_DEVICE=$(cat /sys/class/drm/$(basename $IGPU_CARD)/device/device 2>/dev/null | sed 's/0x//')
+    [ -z "$AMD_PCI_DEVICE" ] && AMD_PCI_DEVICE="150e"
+    MESA_VK_SELECT="1002:${AMD_PCI_DEVICE}"
+
+    mkdir -p /etc/environment.d
+    cat > /etc/environment.d/xgmobile-nvidia.conf << EOF
+WLR_DRM_DEVICES=$IGPU_CARD:$EGPU_CARD
+GAMESCOPE_DISABLE_VK_KHR_PRESENT_WAIT=1
+MESA_VK_DEVICE_SELECT=$MESA_VK_SELECT
+EOF
+
+    echo "Injecting variables into systemd session..."
+    systemctl set-environment WLR_DRM_DEVICES=$IGPU_CARD:$EGPU_CARD
+    systemctl set-environment GAMESCOPE_DISABLE_VK_KHR_PRESENT_WAIT=1
+    systemctl set-environment MESA_VK_DEVICE_SELECT=$MESA_VK_SELECT
+
+    USER_UID=$(id -u $PRIMARY_USER)
+    export DECK_BUS="XDG_RUNTIME_DIR=/run/user/$USER_UID"
+    sudo -u $PRIMARY_USER $DECK_BUS systemctl --user set-environment WLR_DRM_DEVICES=$IGPU_CARD:$EGPU_CARD
+    sudo -u $PRIMARY_USER $DECK_BUS systemctl --user set-environment GAMESCOPE_DISABLE_VK_KHR_PRESENT_WAIT=1
+    sudo -u $PRIMARY_USER $DECK_BUS systemctl --user set-environment MESA_VK_DEVICE_SELECT=$MESA_VK_SELECT
+
+    echo "Creating isolated KDE Plasma environment config..."
+    PLASMA_ENV_DIR="/home/$PRIMARY_USER/.config/plasma-workspace/env"
+    sudo -u $PRIMARY_USER mkdir -p "$PLASMA_ENV_DIR"
+    sudo -u $PRIMARY_USER bash -c "cat > '$PLASMA_ENV_DIR/xgmobile-nvidia-kwin.sh' << EOF
+#!/bin/bash
+export KWIN_DRM_DEVICES=$IGPU_CARD:$EGPU_CARD
+EOF"
+    chmod +x "$PLASMA_ENV_DIR/xgmobile-nvidia-kwin.sh"
+
+    echo "Daemon-reload..."
+    systemctl daemon-reload
+    sudo -u $PRIMARY_USER $DECK_BUS systemctl --user daemon-reload
+
+  elif [ "$VENDOR" == "amd" ]; then
+    echo "AMD Vendor detected. Injecting minimal variables..."
+    mkdir -p /etc/environment.d
+    echo "WLR_DRM_DEVICES=$EGPU_CARD:$IGPU_CARD" > /etc/environment.d/xgmobile-nvidia.conf
+    systemctl set-environment WLR_DRM_DEVICES=$EGPU_CARD:$IGPU_CARD
+    USER_UID=$(id -u $PRIMARY_USER)
+    export DECK_BUS="XDG_RUNTIME_DIR=/run/user/$USER_UID"
+    sudo -u $PRIMARY_USER $DECK_BUS systemctl --user set-environment WLR_DRM_DEVICES=$EGPU_CARD:$IGPU_CARD
+  fi
+fi
+
 echo "Refreshing DRM session..."
 systemctl start display-manager #--no-block
 
