@@ -625,21 +625,35 @@ class Plugin:
       with open(DEBUG_LOG, "a") as dbg:
 
         conn_path = "/sys/devices/platform/asus-nb-wmi/egpu_connected"
+        enable_path = "/sys/devices/platform/asus-nb-wmi/egpu_enable"
+
         if os.path.exists(conn_path):
           with open(conn_path, "r") as f:
             val = f.read().strip()
             status["connected"] = (val == "1")
         else:
-          return "Error: egpu_connected path missing"
+          # BIOS-managed PCIe link (no asus-nb-wmi eGPU sysfs, e.g. ROG Ally X on
+          # Bazzite): rescan and look for the eGPU directly on the PCI bus.
+          try:
+            subprocess.run("echo 1 > /sys/bus/pci/rescan", shell=True, check=False)
+            res = subprocess.check_output(["lspci", "-n", "-d", "10de:"]).decode()
+            status["connected"] = "10de:" in res
+          except Exception:
+            status["connected"] = False
 
         # Check Active Flag
-        enable_path = "/sys/devices/platform/asus-nb-wmi/egpu_enable"
         if os.path.exists(enable_path):
           with open(enable_path, "r") as f:
             val = f.read().strip()
             status["active"] = (val == "1")
         else:
-          return "Error: egpu_enable path missing"
+          # BIOS-managed path: "active" reflects whether egpu-enable has injected
+          # its session env vars (set on enable, removed on eject).
+          try:
+            res = subprocess.check_output(["systemctl", "show-environment"]).decode()
+            status["active"] = "WLR_DRM_DEVICES=" in res
+          except Exception:
+            status["active"] = False
 
         # Vendor check (PCI Bus)
         try:
