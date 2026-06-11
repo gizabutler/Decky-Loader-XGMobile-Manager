@@ -128,6 +128,30 @@ if [[ "$OS_TYPE" == *"bazzite"* ]]; then
   fi
 fi
 
+# Prevent the eGPU's NVIDIA modules from auto-loading via udev/PCI hotplug at
+# boot on BIOS-managed handhelds (no asus-nb-wmi egpu_enable sysfs). A cold
+# boot with the XG Mobile already connected otherwise auto-loads nvidia_drm
+# with modeset=1 (the distro default) against a GPU with no display attached,
+# which hangs forever in "Error while waiting for GPU progress" and crashes
+# the handheld UI / blanks the screen. Blacklisting only blocks alias/udev
+# auto-load — the explicit `modprobe nvidia_drm ...` calls below (by exact
+# module name) still work when the user activates the eGPU.
+PRODUCT_NAME_CHK=$(cat /sys/class/dmi/id/product_name 2>/dev/null || echo "Unknown")
+if [ ! -f /sys/devices/platform/asus-nb-wmi/egpu_enable ] && [[ "$PRODUCT_NAME_CHK" == *"RC71L"* || "$PRODUCT_NAME_CHK" == *"Ally"* ]] && [ ! -f /etc/modprobe.d/nvidia-egpu-noauto.conf ]; then
+  echo "Blacklisting NVIDIA auto-load at boot (BIOS-managed handheld eGPU)..."
+  cat > /etc/modprobe.d/nvidia-egpu-noauto.conf << 'EOF'
+# XG Mobile Manager: prevent the eGPU's NVIDIA modules from auto-loading via
+# udev/PCI hotplug at boot. A cold boot with the XG Mobile connected would
+# otherwise auto-load nvidia_drm (modeset=1) against a headless GPU and hang.
+# egpu-enable still loads these modules explicitly by name on demand, which
+# bypasses this blacklist.
+blacklist nvidia
+blacklist nvidia_drm
+blacklist nvidia_modeset
+blacklist nvidia_uvm
+EOF
+fi
+
 if [ -L /usr/lib/systemd/system-sleep/egpu-resume-fix ] || [ -f /usr/lib/systemd/system-sleep/egpu-resume-fix ]; then
   echo "Purging obsolete legacy egpu-resume-fix..."
   steamos_readonly disable
