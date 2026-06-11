@@ -98,6 +98,36 @@ if [[ "$OS_TYPE" == "steamos" || "$OS_TYPE" == *"cachyos"* ]];  then
   fi
 fi
 
+if [[ "$OS_TYPE" == *"bazzite"* ]]; then
+  # SELF-HEALING: install the boot-sync service so a reboot without running
+  # egpu-eject doesn't leave stale /etc/modprobe.d/nvidia-egpu.conf (modeset=1)
+  # and /etc/environment.d/xgmobile-nvidia.conf around. On BIOS-managed eGPU
+  # hardware (no asus-nb-wmi egpu_enable sysfs), egpu-sync wipes these on every
+  # boot before display-manager starts; without it, leftover modeset=1 makes
+  # nvidia_drm auto-load via udev at boot and hang trying to KMS a GPU with no
+  # display attached, crashing the handheld UI.
+  REPO_ROOT=$(readlink -f "$(dirname "$(readlink -f "$0")")/..")
+  if [ ! -L /usr/local/bin/egpu-sync ] || ! systemctl is-enabled --quiet xgmobile-boot-sync.service 2>/dev/null; then
+    echo "Installing boot-sync service for clean reboots..."
+    ln -sf "$REPO_ROOT/bin/egpu-enable" /usr/local/bin/egpu-enable
+    ln -sf "$REPO_ROOT/bin/egpu-eject" /usr/local/bin/egpu-eject
+    ln -sf "$REPO_ROOT/bin/egpu-sync" /usr/local/bin/egpu-sync
+    chmod +x "$REPO_ROOT/bin/egpu-enable" "$REPO_ROOT/bin/egpu-eject" "$REPO_ROOT/bin/egpu-sync"
+    cp "$REPO_ROOT/assets/services/xgmobile-boot-sync.service" /etc/systemd/system/ 2>/dev/null || true
+    systemctl daemon-reload
+    systemctl enable xgmobile-boot-sync.service
+
+    # SELinux: scripts live under /home/.../homebrew (user_home_t), which init_t
+    # (systemd services like xgmobile-boot-sync) is not allowed to execute,
+    # causing "Permission denied" even though Unix permissions are correct.
+    # Persistently relabel them as bin_t so the boot-time service can run them.
+    if command -v semanage >/dev/null 2>&1; then
+      semanage fcontext -a -t bin_t "${REPO_ROOT}/bin/egpu-(enable|eject|sync)" 2>/dev/null || true
+      restorecon -v "$REPO_ROOT/bin/egpu-enable" "$REPO_ROOT/bin/egpu-eject" "$REPO_ROOT/bin/egpu-sync" 2>/dev/null || true
+    fi
+  fi
+fi
+
 if [ -L /usr/lib/systemd/system-sleep/egpu-resume-fix ] || [ -f /usr/lib/systemd/system-sleep/egpu-resume-fix ]; then
   echo "Purging obsolete legacy egpu-resume-fix..."
   steamos_readonly disable
